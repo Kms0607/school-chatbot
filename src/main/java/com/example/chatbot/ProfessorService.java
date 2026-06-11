@@ -10,7 +10,6 @@ public class ProfessorService {
     private final ProfessorRepository professorRepository;
     private final HakgwaRepository hakgwaRepository;
 
-    // 手动构造注入，替代@RequiredArgsConstructor
     public ProfessorService(ProfessorRepository professorRepository, HakgwaRepository hakgwaRepository) {
         this.professorRepository = professorRepository;
         this.hakgwaRepository = hakgwaRepository;
@@ -43,5 +42,11 @@ public class ProfessorService {
 
     public List<Professor> batchSave(List<Professor> list) {
         return professorRepository.saveAll(list);
+    }
+
+    // 新增根据ID查询VO
+    public Optional<ProfessorVO> getById(Integer profId) {
+        Optional<Professor> optProf = professorRepository.findById(profId);
+        return optProf.map(this::convertVO);
     }
 }
