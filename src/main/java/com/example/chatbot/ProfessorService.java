@@ -25,6 +25,11 @@ public class ProfessorService {
         return list.stream().map(this::convertVO).collect(Collectors.toList());
     }
 
+    public List<ProfessorVO> listByGyeyeolName(String gyeyeolNameKr) {
+        List<Professor> list = professorRepository.findByHakgwa_Gyeyeol_GyeyeolNameKr(gyeyeolNameKr);
+        return list.stream().map(this::convertVO).collect(Collectors.toList());
+    }
+
     public ProfessorVO convertVO(Professor p) {
         ProfessorVO vo = new ProfessorVO();
         vo.setProfId(p.getProfId());
@@ -44,9 +49,9 @@ public class ProfessorService {
         return professorRepository.saveAll(list);
     }
 
-    // 新增根据ID查询VO
     public Optional<ProfessorVO> getById(Integer profId) {
         Optional<Professor> optProf = professorRepository.findById(profId);
         return optProf.map(this::convertVO);
+
     }
 }

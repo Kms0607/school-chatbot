@@ -9,6 +9,7 @@ import java.util.Map;
 @RestController
 public class LibraryBotController {
 
+
     private final Map<String, UserState> userStates = new HashMap<>();
 
     private static final String KR_SERVICE = "【2026년 제1학기】\n" +
@@ -96,7 +97,7 @@ public class LibraryBotController {
             state.step = "WAIT_MENU";
             userStates.put(userId, state);
 
-            return buildResponse(getMenu(state.lang));
+            return menuCardResponse(state.lang);
         }
 
         if ("WAIT_MENU".equals(state.step) || isLibraryMenu(content)) {
@@ -212,19 +213,6 @@ public class LibraryBotController {
         }
     }
 
-    private String getMenu(String lang) {
-        switch (lang) {
-            case "cn":
-                return "菜单选择：\n1. 全部服务\n2. 畅销榜单";
-            case "en":
-                return "Menu:\n1. All Services\n2. Bestseller List";
-            case "vi":
-                return "Menu:\n1. Tất cả dịch vụ\n2. Danh sách bán chạy";
-            default:
-                return "메뉴를 선택하세요.\n1. 전체 서비스\n2. 인기 도서 순위";
-        }
-    }
-
     private String getError(String lang) {
         switch (lang) {
             case "cn":
@@ -262,6 +250,70 @@ public class LibraryBotController {
             default:
                 return KR_BOOK_LIST;
         }
+    }
+
+    private Map<String, Object> menuCardResponse(String lang) {
+
+        String title;
+        String description;
+        String serviceLabel;
+        String bookLabel;
+
+        switch (lang) {
+            case "cn":
+                title = "图书馆服务";
+                description = "请选择菜单。";
+                serviceLabel = "全部服务";
+                bookLabel = "畅销榜单";
+                break;
+            case "en":
+                title = "Library Service";
+                description = "Please select a menu.";
+                serviceLabel = "All Services";
+                bookLabel = "Bestseller List";
+                break;
+            case "vi":
+                title = "Dịch vụ thư viện";
+                description = "Vui lòng chọn menu.";
+                serviceLabel = "Tất cả dịch vụ";
+                bookLabel = "Danh sách bán chạy";
+                break;
+            default:
+                title = "도서관 서비스";
+                description = "메뉴를 선택하세요.";
+                serviceLabel = "전체 서비스";
+                bookLabel = "인기 도서 순위";
+        }
+
+        Map<String, Object> serviceButton = Map.of(
+                "action", "message",
+                "label", serviceLabel,
+                "messageText", serviceLabel
+        );
+
+        Map<String, Object> bookButton = Map.of(
+                "action", "message",
+                "label", bookLabel,
+                "messageText", bookLabel
+        );
+
+        return Map.of(
+                "version", "2.0",
+                "template", Map.of(
+                        "outputs", List.of(
+                                Map.of(
+                                        "basicCard", Map.of(
+                                                "title", title,
+                                                "description", description,
+                                                "buttons", List.of(
+                                                        serviceButton,
+                                                        bookButton
+                                                )
+                                        )
+                                )
+                        )
+                )
+        );
     }
 
     private Map<String, Object> buildResponse(String text) {
@@ -341,6 +393,8 @@ public class LibraryBotController {
 
     @GetMapping("/library/all/vi")
     public String viAll() {
-        return VI_SERVICE + "\n\n===== Danh sách bán chạy =====\n" + VI_BOOK_LIST;
+        return VI_SERVICE;
     }
+
+
 }

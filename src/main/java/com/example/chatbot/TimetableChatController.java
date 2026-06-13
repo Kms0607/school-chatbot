@@ -2,7 +2,6 @@ package com.example.chatbot;
 
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -10,17 +9,19 @@ import java.util.stream.Collectors;
 @RestController
 public class TimetableChatController {
 
+
+    private final UserSession userSession;
     private final TimetableRepository timetableRepository;
     private final KoreanTranslateUtil koreanTranslateUtil;
 
-    private final Map<String, UserState> userStates = new HashMap<>();
-
     public TimetableChatController(
             TimetableRepository timetableRepository,
-            KoreanTranslateUtil koreanTranslateUtil
+            KoreanTranslateUtil koreanTranslateUtil,
+            UserSession userSession
     ) {
         this.timetableRepository = timetableRepository;
         this.koreanTranslateUtil = koreanTranslateUtil;
+        this.userSession = userSession;
     }
 
     @PostMapping("/kakao/timetable/chat")
@@ -36,53 +37,57 @@ public class TimetableChatController {
 
         String userId = String.valueOf(user.get("id"));
 
-        UserState state = userStates.getOrDefault(userId, new UserState());
+        String lang = userSession.getLang(userId);
+        String step = userSession.getStep(userId);
 
-        // 1. 처음에 언어 선택 가능
         String selectedLang = detectLang(utterance);
-        if (selectedLang != null && state.step == null) {
-            state.lang = selectedLang;
-            userStates.put(userId, state);
-            return kakaoText(msg("LANG_SET", state.lang));
+        if (selectedLang != null) {
+            userSession.setLang(userId, selectedLang);
+            return kakaoText(msg("LANG_SET", selectedLang));
         }
 
-        // 2. 시간표 조회 시작
         if (utterance.contains("시간표")
                 || utterance.equalsIgnoreCase("timetable")
                 || utterance.contains("课程表")
                 || utterance.toLowerCase().contains("thời khóa biểu")) {
 
-            state.step = "WAIT_GRADE";
-            userStates.put(userId, state);
-
-            return kakaoText(msg("ASK_GRADE", state.lang));
+            userSession.setStep(userId, "WAIT_GRADE");
+            return kakaoGradeCard(msg("ASK_GRADE", lang), lang);
         }
 
-        // 3. 학년 입력
-        if ("WAIT_GRADE".equals(state.step)) {
-            try {
-                state.grade = Integer.parseInt(utterance);
-                state.step = "WAIT_CLASS";
-                userStates.put(userId, state);
+        if ("WAIT_GRADE".equals(step)) {
 
-                return kakaoText(msg("ASK_CLASS", state.lang));
+            String gradeText = utterance
+                    .replace("학년", "")
+                    .replace("年级", "")
+                    .replace("Grade", "")
+                    .replace("grade", "")
+                    .trim();
+
+            try {
+                int grade = Integer.parseInt(gradeText);
+
+                userSession.setYear(userId, grade);
+                userSession.setStep(userId, "WAIT_CLASS");
+
+                return kakaoText(msg("ASK_CLASS", lang));
 
             } catch (Exception e) {
-                return kakaoText(msg("GRADE_ERROR", state.lang));
+                return kakaoGradeCard(msg("GRADE_ERROR", lang), lang);
             }
         }
 
-        // 4. 반 입력 후 바로 시간표 출력
-        if ("WAIT_CLASS".equals(state.step)) {
-            state.className = utterance.endsWith("반")
+        if ("WAIT_CLASS".equals(step)) {
+
+            String className = utterance.endsWith("반")
                     ? utterance
                     : utterance + "반";
 
-            String lang = state.lang;
-            int grade = state.grade;
-            String className = state.className;
+            userSession.setClassName(userId, className);
 
-            userStates.remove(userId);
+            int grade = userSession.getYear(userId);
+
+            userSession.clearTimetableState(userId);
 
             List<TimetableVo> list = timetableRepository
                     .findByGradeAndClassName(grade, className)
@@ -150,8 +155,7 @@ public class TimetableChatController {
             return kakaoText(sb.toString());
         }
 
-        // 5. 기본 안내
-        return kakaoText(msg("HELP", state.lang));
+        return kakaoText(msg("HELP", lang));
     }
 
     private String detectLang(String utterance) {
@@ -184,11 +188,11 @@ public class TimetableChatController {
                 case "LANG_SET":
                     return "Language has been set to English.\nHow can I help you?";
                 case "ASK_GRADE":
-                    return "Please enter your grade.\nExample: 1";
+                    return "Please select your grade.";
                 case "ASK_CLASS":
                     return "Please enter your class.\nExample: A";
                 case "GRADE_ERROR":
-                    return "Please enter the grade as a number.\nExample: 1";
+                    return "Please select 1st grade, 2nd grade, or 3rd grade.";
                 case "NO_TIMETABLE":
                     return "No timetable found.";
                 default:
@@ -201,11 +205,11 @@ public class TimetableChatController {
                 case "LANG_SET":
                     return "语言已设置为中文。\n请问需要什么帮助？";
                 case "ASK_GRADE":
-                    return "请输入年级。\n例: 1";
+                    return "请选择年级。";
                 case "ASK_CLASS":
                     return "请输入班级。\n例: A";
                 case "GRADE_ERROR":
-                    return "年级请输入数字。\n例: 1";
+                    return "请选择1年级、2年级或3年级。";
                 case "NO_TIMETABLE":
                     return "没有找到课程表。";
                 default:
@@ -218,11 +222,11 @@ public class TimetableChatController {
                 case "LANG_SET":
                     return "Ngôn ngữ đã được đặt thành tiếng Việt.\nTôi có thể giúp gì cho bạn?";
                 case "ASK_GRADE":
-                    return "Vui lòng nhập khối lớp.\nVí dụ: 1";
+                    return "Vui lòng chọn khối lớp.";
                 case "ASK_CLASS":
                     return "Vui lòng nhập lớp.\nVí dụ: A";
                 case "GRADE_ERROR":
-                    return "Vui lòng nhập khối lớp bằng số.\nVí dụ: 1";
+                    return "Vui lòng chọn khối 1, 2 hoặc 3.";
                 case "NO_TIMETABLE":
                     return "Không tìm thấy thời khóa biểu.";
                 default:
@@ -234,11 +238,11 @@ public class TimetableChatController {
             case "LANG_SET":
                 return "한국어로 설정되었습니다.\n무엇을 도와드릴까요?";
             case "ASK_GRADE":
-                return "학년을 입력하세요.\n예: 1";
+                return "학년을 선택하세요.";
             case "ASK_CLASS":
                 return "반을 입력하세요.\n예: A";
             case "GRADE_ERROR":
-                return "학년은 숫자로 입력하세요.\n예: 1";
+                return "1학년, 2학년, 3학년 중에서 선택하세요.";
             case "NO_TIMETABLE":
                 return "시간표가 없습니다.";
             default:
@@ -261,10 +265,72 @@ public class TimetableChatController {
         );
     }
 
-    static class UserState {
-        String step;
-        String lang = "ko";
-        int grade;
-        String className;
+    private Map<String, Object> kakaoGradeCard(String text, String lang) {
+
+        String title = switch (lang) {
+            case "zh" -> "课程表查询";
+            case "en" -> "Timetable Search";
+            case "vi" -> "Tra cứu thời khóa biểu";
+            default -> "시간표 조회";
+        };
+
+        String grade1Label = switch (lang) {
+            case "zh" -> "1年级";
+            case "en" -> "Grade 1";
+            case "vi" -> "Khối 1";
+            default -> "1학년";
+        };
+
+        String grade2Label = switch (lang) {
+            case "zh" -> "2年级";
+            case "en" -> "Grade 2";
+            case "vi" -> "Khối 2";
+            default -> "2학년";
+        };
+
+        String grade3Label = switch (lang) {
+            case "zh" -> "3年级";
+            case "en" -> "Grade 3";
+            case "vi" -> "Khối 3";
+            default -> "3학년";
+        };
+
+        Map<String, Object> grade1 = Map.of(
+                "action", "message",
+                "label", grade1Label,
+                "messageText", grade1Label
+        );
+
+        Map<String, Object> grade2 = Map.of(
+                "action", "message",
+                "label", grade2Label,
+                "messageText", grade2Label
+        );
+
+        Map<String, Object> grade3 = Map.of(
+                "action", "message",
+                "label", grade3Label,
+                "messageText", grade3Label
+        );
+
+        return Map.of(
+                "version", "2.0",
+                "template", Map.of(
+                        "outputs", List.of(
+                                Map.of(
+                                        "basicCard", Map.of(
+                                                "title", title,
+                                                "description", text,
+                                                "buttons", List.of(
+                                                        grade1,
+                                                        grade2,
+                                                        grade3
+                                                )
+                                        )
+                                )
+                        )
+                )
+        );
     }
+
 }
